@@ -1,0 +1,809 @@
+---
+title: "Tema 2: Obtención de Datos - Ejemplos Prácticos"
+subtitle: "Tratamiento de los Datos. Grado en Ciencia de Datos - UV"
+author: "Ejemplos ilustrativos. Generados con IA a partir de Tema2.pdf"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    number_sections: yes
+    theme: united
+    highlight: tango
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, 
+                      comment = NA, fig.align = 'center')
+```
+
+# Introducción
+
+Este documento contiene ejemplos funcionales de los conceptos explicados en el Tema 2 sobre obtención e importación de datos en R, utilizando **únicamente R base y la librería readr**.
+
+# Configuración inicial y paquetes
+
+```{r paquetes}
+# Verificar e instalar paquetes necesarios (pacman)
+if (!require("pacman")) install.packages("pacman")
+
+# Cargar librerías
+pacman::p_load(readr, rio, knitr, dplyr)
+```
+
+# Manejo de ficheros y directorios en R
+
+## Working Directory y rutas relativas
+
+```{r working_directory}
+# Obtener el directorio de trabajo actual
+directorio_actual <- getwd()
+cat("Directorio de trabajo actual:\n")
+print(directorio_actual)
+
+# Crear directorio para datos si no existe
+if (!file.exists("data")) {
+  dir.create("data")
+  cat("\nDirectorio 'data' creado exitosamente\n")
+} else {
+  cat("\nEl directorio 'data' ya existe\n")
+}
+
+# Verificar que se creó
+cat("\n¿Existe el directorio 'data'?", file.exists("data"), "\n")
+```
+
+## Información del sistema de archivos
+
+```{r info_sistema}
+# Obtener información sobre codificación del sistema
+cat("Información de localización del sistema:\n")
+cat(Sys.getlocale(), "\n")
+
+# Separador de rutas según sistema operativo
+cat("\nSeparador de archivos:", .Platform$file.sep, "\n")
+```
+
+## Función list.files - Ejemplos básicos
+
+```{r list_files_basico}
+# Ejemplo 1: Listar todos los archivos en el directorio actual
+archivos_actuales <- list.files()
+cat("Archivos en el directorio actual:\n")
+print(archivos_actuales)
+
+# Ejemplo 2: Listar archivos en la carpeta 'data'
+if (file.exists("data")) {
+  archivos_data <- list.files("data")
+  cat("\nArchivos en la carpeta 'data':\n")
+  if(length(archivos_data) == 0) {
+    cat("(vacía por ahora)\n")
+  } else {
+    print(archivos_data)
+  }
+}
+
+# Ejemplo 3: Listar directorios
+cat("\nDirectorios en el directorio actual:\n")
+todos <- list.files()
+solo_dirs <- todos[file.info(todos)$isdir]
+print(solo_dirs)
+```
+
+## list.files con parámetros avanzados
+
+```{r list_files_avanzado}
+# Crear algunos archivos de ejemplo para demostración
+write.csv(mtcars, "data/ejemplo1.csv", row.names = FALSE)
+write.csv(iris, "data/ejemplo2.csv", row.names = FALSE)
+write.csv(cars, "data/ejemplo3.csv", row.names = FALSE)
+saveRDS(airquality, "data/ejemplo.rds")
+
+cat("Archivos de ejemplo creados exitosamente\n\n")
+
+# Ejemplo 4: Listar solo archivos CSV
+archivos_csv <- list.files("data", pattern = "\\.csv$")
+cat("Archivos CSV en 'data':\n")
+print(archivos_csv)
+
+# Ejemplo 5: Listar archivos con ruta completa
+archivos_full_path <- list.files("data", full.names = TRUE)
+cat("\nArchivos con ruta completa:\n")
+print(archivos_full_path)
+
+# Ejemplo 6: Listar archivos recursivamente (incluye subdirectorios)
+# Primero crear un subdirectorio
+if (!file.exists("data/subfolder")) {
+  dir.create("data/subfolder")
+  write.csv(CO2, "data/subfolder/co2_data.csv", row.names = FALSE)
+}
+
+archivos_recursivos <- list.files("data", recursive = TRUE)
+cat("\nArchivos (búsqueda recursiva en 'data'):\n")
+print(archivos_recursivos)
+
+# Ejemplo 7: Filtrar solo CSV de forma recursiva
+csv_recursivos <- list.files("data", pattern = "\\.csv$", recursive = TRUE)
+cat("\nSolo archivos CSV (búsqueda recursiva):\n")
+print(csv_recursivos)
+```
+
+## Información de archivos con file.info()
+
+```{r file_info}
+# Obtener información detallada de archivos
+info_archivos <- file.info(list.files("data", full.names = TRUE, recursive = FALSE))
+cat("Información de archivos en 'data':\n")
+print(info_archivos[, c("size", "mtime", "isdir")])
+
+# Tamaño total de archivos en bytes
+tamaño_total <- sum(info_archivos$size[!info_archivos$isdir])
+cat("\nTamaño total de archivos:", tamaño_total, "bytes\n")
+cat("Tamaño total de archivos:", round(tamaño_total/1024, 2), "KB\n")
+```
+
+## Aplicación práctica de list.files: Importar múltiples archivos
+
+```{r list_files_aplicacion}
+# Obtener lista de archivos CSV
+archivos_csv_completos <- list.files("data", pattern = "\\.csv$", 
+                                      full.names = TRUE, recursive = FALSE)
+
+cat("Archivos CSV a importar:\n")
+print(basename(archivos_csv_completos))
+
+# Método 1: Usar un bucle for
+lista_datos <- list()
+for(i in 1:length(archivos_csv_completos)) {
+  archivo <- archivos_csv_completos[i]
+  nombre <- basename(archivo)
+  cat("\nCargando:", nombre, "\n")
+  lista_datos[[nombre]] <- read.csv(archivo)
+}
+
+cat("\nNúmero total de datasets cargados:", length(lista_datos), "\n")
+
+# Mostrar dimensiones de cada dataset
+cat("\nDimensiones de cada dataset:\n")
+for(nombre in names(lista_datos)) {
+  dims <- dim(lista_datos[[nombre]])
+  cat(sprintf("%s: %d filas x %d columnas\n", nombre, dims[1], dims[2]))
+}
+```
+
+# Importación de datos desde ficheros
+
+## Creación de datos de ejemplo
+
+```{r crear_datos_ejemplo}
+# Crear un archivo CSV de ejemplo
+data_ejemplo <- data.frame(
+  ID = 1:5,
+  Nombre = c("Ana", "Juan", "María", "Pedro", "Lucía"),
+  Edad = c(25, 30, 28, 35, 22),
+  Ciudad = c("Valencia", "Madrid", "Barcelona", "Valencia", "Sevilla"),
+  Salario = c(25000, 35000, 30000, 40000, 22000)
+)
+
+write.csv(data_ejemplo, "data/empleados.csv", row.names = FALSE)
+cat("Archivo 'empleados.csv' creado exitosamente\n\n")
+
+# Mostrar los primeros registros
+cat("Datos de ejemplo:\n")
+print(data_ejemplo)
+```
+
+## Uso del Asistente de Importación de RStudio
+
+**IMPORTANTE**: En RStudio existe un asistente visual para importar datos:
+
+1. Ve al panel **Environment** (Entorno)
+2. Click en **Import Dataset** 
+3. Selecciona el tipo de archivo (From Text (base), From Text (readr), etc.)
+4. Navega hasta tu archivo
+5. Ajusta las opciones en la vista previa
+6. Copia el código generado
+
+**El asistente genera automáticamente el código R necesario**, lo cual es muy útil para aprender la sintaxis correcta.
+
+```{r asistente_comentario, eval=FALSE}
+# Ejemplo de código generado por el asistente de RStudio:
+# (Este código NO se ejecuta, solo es ilustrativo)
+
+# Con R base:
+empleados <- read.csv("data/empleados.csv")
+
+# Con readr:
+empleados <- read_csv("data/empleados.csv")
+```
+
+## Importación con R base (read.csv)
+
+```{r import_base}
+# Método 1: read.csv (R base)
+datos_base <- read.csv("data/empleados.csv", stringsAsFactors = FALSE)
+
+cat("Datos importados con read.csv (R base):\n")
+str(datos_base)
+
+cat("\nPrimeras filas:\n")
+print(head(datos_base, 3))
+
+cat("\nClase del objeto:", class(datos_base), "\n")
+```
+
+## Importación con readr (read_csv)
+
+```{r import_readr}
+# Método 2: read_csv (readr)
+datos_readr <- read_csv("data/empleados.csv", show_col_types = FALSE)
+
+cat("\nDatos importados con read_csv (readr):\n")
+str(datos_readr)
+
+cat("\nPrimeras filas:\n")
+print(head(datos_readr, 3))
+
+cat("\nClase del objeto:", class(datos_readr), "\n")
+```
+
+## Comparación: read.csv vs read_csv
+
+```{r comparacion_funciones}
+cat("COMPARACIÓN read.csv vs read_csv\n")
+cat("=====================================\n\n")
+
+cat("1. Clase del objeto:\n")
+cat("   read.csv():", class(datos_base), "\n")
+cat("   read_csv():", class(datos_readr), "\n\n")
+
+cat("2. Velocidad de importación:\n")
+cat("   read_csv() suele ser MÁS RÁPIDA\n\n")
+
+cat("3. Conversión de strings:\n")
+cat("   read.csv(): Convierte a factor (si stringsAsFactors=TRUE)\n")
+cat("   read_csv(): Mantiene como character\n\n")
+
+cat("4. Nombres de columnas:\n")
+cat("   read.csv(): Modifica nombres con caracteres especiales\n")
+cat("   read_csv(): Mantiene nombres originales\n\n")
+
+cat("5. Mensajes informativos:\n")
+cat("   read.csv(): Silencioso\n")
+cat("   read_csv(): Muestra especificación de columnas\n")
+```
+
+## Importación con rio
+
+```{r import_rio}
+# Método 3: import (rio)
+# rio detecta automáticamente el formato por la extensión
+datos_rio <- rio::import("data/empleados.csv")
+
+cat("Datos importados con rio::import:\n")
+str(datos_rio)
+
+cat("\nVentaja de rio: detecta automáticamente el formato\n")
+cat("Funciona con CSV, Excel, SPSS, Stata, etc.\n")
+```
+
+# Manejo de problemas comunes en importación
+
+## Problema 1: Nombres de columnas con caracteres especiales
+
+```{r problema_nombres}
+# Crear CSV con nombres problemáticos
+data_nombres <- data.frame(
+  Nombre_Completo = c("Ana García", "Juan López", "María Pérez"),
+  Salario_Mes = c(2000, 2500, 2200),
+  Años_Experiencia = c(5, 8, 3)
+)
+
+# Forzar nombres con espacios y caracteres especiales
+colnames(data_nombres) <- c("Nombre Completo", "Salario/Mes", "Años Experiencia")
+
+write.csv(data_nombres, "data/nombres_problematicos.csv", row.names = FALSE)
+
+cat("Nombres originales en el archivo CSV:\n")
+cat(colnames(data_nombres), sep = "\n")
+
+# Importar con read.csv (cambia nombres automáticamente)
+datos_base_nombres <- read.csv("data/nombres_problematicos.csv")
+cat("\n\nNombres después de read.csv():\n")
+cat(colnames(datos_base_nombres), sep = "\n")
+
+# Importar con read_csv (mantiene nombres originales)
+datos_readr_nombres <- read_csv("data/nombres_problematicos.csv", 
+                                 show_col_types = FALSE)
+cat("\n\nNombres después de read_csv():\n")
+cat(colnames(datos_readr_nombres), sep = "\n")
+
+cat("\n\nNota: read.csv() reemplaza espacios y '/' con puntos (.)\n")
+```
+
+## Problema 2: Codificación de caracteres
+
+```{r problema_encoding}
+# Averiguar la codificación del sistema
+cat("Codificación del sistema:\n")
+cat(Sys.getlocale("LC_CTYPE"), "\n\n")
+
+# Crear archivo con acentos y caracteres especiales
+texto_acentos <- data.frame(
+  ciudad = c("León", "Cádiz", "Málaga", "Ávila"),
+  region = c("Castilla y León", "Andalucía", "Andalucía", "Castilla y León"),
+  poblacion = c(125000, 115000, 575000, 58000)
+)
+
+write.csv(texto_acentos, "data/ciudades.csv", row.names = FALSE, 
+          fileEncoding = "UTF-8")
+
+# Importar con codificación correcta
+datos_utf8 <- read.csv("data/ciudades.csv", encoding = "UTF-8", 
+                        stringsAsFactors = FALSE)
+
+cat("Datos con acentos importados correctamente:\n")
+print(datos_utf8)
+
+# Función para detectar codificación (readr)
+cat("\n\nDetección de codificación con readr:\n")
+encoding_detectado <- guess_encoding("data/ciudades.csv")
+print(encoding_detectado)
+```
+
+## Problema 3: Comas en campos de texto
+
+```{r problema_comas}
+# Crear datos con comas en el texto
+data_comas <- data.frame(
+  empresa = c("García, S.A.", "López & Hijos, SL", "Martínez Corp"),
+  direccion = c("Calle Mayor, 5", "Av. Principal, 123", "Plaza España, 8"),
+  empleados = c(50, 120, 80)
+)
+
+write.csv(data_comas, "data/empresas.csv", row.names = FALSE)
+
+cat("Archivo CSV creado con comas en el texto\n\n")
+
+# read.csv maneja correctamente las comillas
+datos_con_comas <- read.csv("data/empresas.csv", stringsAsFactors = FALSE)
+cat("Datos importados correctamente (comas dentro de comillas):\n")
+print(datos_con_comas)
+
+cat("\n\nNota: Las funciones de R respetan las comillas como delimitadores de campo\n")
+```
+
+## Problema 4: Valores faltantes (NA)
+
+```{r problema_na}
+# Crear datos con valores faltantes
+data_na <- data.frame(
+  id = 1:5,
+  nombre = c("Ana", "Juan", "", "Pedro", "Lucía"),
+  edad = c(25, NA, 28, 35, 22),
+  ciudad = c("Valencia", "Madrid", NA, "Valencia", "Sevilla")
+)
+
+write.csv(data_na, "data/datos_na.csv", row.names = FALSE)
+
+# Importar especificando qué se considera NA
+datos_na_default <- read.csv("data/datos_na.csv", stringsAsFactors = FALSE)
+cat("Importación por defecto:\n")
+print(datos_na_default)
+
+# Con read_csv podemos especificar múltiples representaciones de NA
+datos_na_readr <- read_csv("data/datos_na.csv", 
+                           na = c("", "NA", "N/A"), 
+                           show_col_types = FALSE)
+cat("\n\nCon na = c('', 'NA', 'N/A'):\n")
+print(datos_na_readr)
+```
+
+# Lectura línea a línea con readLines
+
+```{r readlines_ejemplo}
+# Crear un archivo de texto simple
+texto_lineas <- c(
+  "Encabezado: Informe de Ventas",
+  "Fecha: 2024",
+  "================",
+  "Producto A: 1500 unidades",
+  "Producto B: 2300 unidades",
+  "Producto C: 890 unidades",
+  "================",
+  "Total: 4690 unidades"
+)
+
+writeLines(texto_lineas, "data/informe.txt")
+
+# Leer línea a línea
+lineas <- readLines("data/informe.txt")
+cat("Contenido del archivo (línea a línea):\n")
+print(lineas)
+
+# Procesar líneas
+cat("\n\nAnálisis del archivo:\n")
+cat("Número total de líneas:", length(lineas), "\n")
+cat("Primera línea:", lineas[1], "\n")
+cat("Última línea:", lineas[length(lineas)], "\n")
+
+# Filtrar líneas que contienen números
+lineas_con_numeros <- grep("[0-9]+", lineas, value = TRUE)
+cat("\nLíneas que contienen números:\n")
+print(lineas_con_numeros)
+```
+
+## Uso práctico de readLines: Inspección de archivos
+
+```{r readlines_inspeccion}
+# readLines es útil para inspeccionar archivos antes de importarlos
+cat("Primeras 5 líneas de empleados.csv:\n")
+primeras_lineas <- readLines("data/empleados.csv", n = 5)
+print(primeras_lineas)
+
+cat("\n\nEsto permite verificar:\n")
+cat("- Si hay encabezado\n")
+cat("- Qué separador se usa\n")
+cat("- Si hay caracteres problemáticos\n")
+cat("- La estructura general del archivo\n")
+```
+
+# Almacenamiento de datos
+
+## Método 1: saveRDS y readRDS (un solo objeto)
+
+```{r save_rds}
+# Crear un objeto para guardar
+modelo_lineal <- lm(mpg ~ wt + hp, data = mtcars)
+
+cat("Modelo lineal creado:\n")
+print(summary(modelo_lineal)$coefficients)
+
+# Guardar con saveRDS
+saveRDS(modelo_lineal, "data/modelo.rds")
+cat("\n✓ Modelo guardado como 'modelo.rds'\n")
+
+# Verificar que el archivo existe
+cat("¿Archivo existe?", file.exists("data/modelo.rds"), "\n")
+cat("Tamaño:", file.info("data/modelo.rds")$size, "bytes\n")
+
+# Recuperar con readRDS
+modelo_recuperado <- readRDS("data/modelo.rds")
+cat("\n✓ Modelo recuperado exitosamente\n\n")
+
+# Verificar que es el mismo modelo
+cat("Coeficientes del modelo recuperado:\n")
+print(coef(modelo_recuperado))
+```
+
+## Método 2: save y load (múltiples objetos)
+
+```{r save_load}
+# Crear varios objetos
+vector_numeros <- 1:10
+matriz_datos <- matrix(1:20, nrow = 4)
+lista_mixta <- list(
+  numeros = vector_numeros, 
+  matriz = matriz_datos,
+  texto = "Datos guardados"
+)
+
+cat("Objetos creados:\n")
+cat("- vector_numeros:", length(vector_numeros), "elementos\n")
+cat("- matriz_datos:", nrow(matriz_datos), "x", ncol(matriz_datos), "\n")
+cat("- lista_mixta:", length(lista_mixta), "elementos\n")
+
+# Guardar múltiples objetos
+save(vector_numeros, matriz_datos, lista_mixta, 
+     file = "data/multiples_objetos.RData")
+# Alternativa de guardado
+save(list=c('vector_numeros', 'matriz_datos', 'lista_mixta'), 
+     file = "data/multiples_objetos_opt2.RData")
+
+cat("\n✓ Objetos guardados en 'multiples_objetos.RData'\n")
+
+# Limpiar workspace
+rm(vector_numeros, matriz_datos, lista_mixta)
+cat("\n✓ Objetos eliminados del entorno\n")
+
+# Verificar que no existen
+cat("¿Existe 'vector_numeros'?", exists("vector_numeros"), "\n")
+cat("¿Existe 'matriz_datos'?", exists("matriz_datos"), "\n")
+
+# Cargar objetos
+load("data/multiples_objetos.RData")
+cat("\n✓ Objetos cargados desde el archivo\n")
+
+# Verificar que ahora existen
+cat("\n¿Existe 'vector_numeros' ahora?", exists("vector_numeros"), "\n")
+cat("¿Existe 'matriz_datos' ahora?", exists("matriz_datos"), "\n")
+
+cat("\nContenido recuperado:\n")
+print(vector_numeros)
+```
+
+## Método 3: save.image y load (todo el workspace)
+
+```{r save_image}
+# Crear algunos objetos de trabajo
+x <- 1:100
+y <- x^2
+nombre_proyecto <- "Análisis Datos 2024"
+
+cat("Objetos en el workspace actual:\n")
+objetos_actuales <- ls()
+print(objetos_actuales)
+
+# Guardar TODO el workspace
+save.image("data/workspace_completo.RData")
+cat("\n✓ Workspace completo guardado\n")
+
+cat("\nUso: save.image() guarda TODOS los objetos del entorno\n")
+cat("Útil para guardar todo tu trabajo al final de una sesión\n")
+```
+
+## Comparación de métodos de almacenamiento
+
+```{r comparacion_guardado}
+cat("COMPARACIÓN DE MÉTODOS DE GUARDADO\n")
+cat("====================================\n\n")
+
+cat("saveRDS() + readRDS():\n")
+cat("  • Guarda UN objeto\n")
+cat("  • Puedes asignar cualquier nombre al cargar\n")
+cat("  • Uso: saveRDS(objeto, 'archivo.rds')\n")
+cat("  •      obj <- readRDS('archivo.rds')\n\n")
+
+cat("save() + load():\n")
+cat("  • Guarda UNO O MÁS objetos\n")
+cat("  • Los objetos mantienen sus nombres originales\n")
+cat("  • Uso: save(obj1, obj2, file='archivo.RData')\n")
+cat("  •      load('archivo.RData')\n\n")
+
+cat("save.image() + load():\n")
+cat("  • Guarda TODO el workspace\n")
+cat("  • Los objetos mantienen sus nombres\n")
+cat("  • Uso: save.image('archivo.RData')\n")
+cat("  •      load('archivo.RData')\n")
+```
+
+# Fusión de datos con dplyr
+
+## Preparación de datos para fusión
+
+```{r fusion_datos_prep}
+# Crear dos datasets relacionados
+empleados <- data.frame(
+  id_empleado = 1:6,
+  nombre = c("Ana", "Juan", "María", "Pedro", "Lucía", "Carlos"),
+  departamento_id = c(1, 2, 1, 3, 2, 4)
+)
+
+departamentos <- data.frame(
+  departamento_id = 1:4,
+  nombre_dept = c("Ventas", "IT", "RRHH", "Marketing"),
+  presupuesto = c(100000, 150000, 80000, 120000)
+)
+
+proyectos <- data.frame(
+  id_proyecto = 1:3,
+  nombre_proyecto = c("Proyecto A", "Proyecto B", "Proyecto C"),
+  departamento_id = c(1, 1, 2)
+)
+
+cat("Tabla EMPLEADOS:\n")
+print(empleados)
+cat("\nTabla DEPARTAMENTOS:\n")
+print(departamentos)
+cat("\nTabla PROYECTOS:\n")
+print(proyectos)
+```
+
+## Fusión tipo INNER JOIN
+
+```{r fusion_inner}
+# Inner join: solo registros con coincidencias en AMBAS tablas
+fusion_inner <- dplyr::inner_join(empleados, departamentos, by = "departamento_id")
+
+cat("INNER JOIN (solo coincidencias):\n")
+cat("Empleados:", nrow(empleados), "| Departamentos:", nrow(departamentos), 
+    "| Resultado:", nrow(fusion_inner), "\n\n")
+print(fusion_inner)
+
+cat("\nExplicación: Solo se mantienen empleados que tienen departamento\n")
+cat("y departamentos que tienen empleados\n")
+```
+
+## Fusión tipo LEFT JOIN
+
+```{r fusion_left}
+# Left join: todos los registros de la tabla izquierda
+fusion_left <- dplyr::left_join(empleados, departamentos, by = "departamento_id")
+
+cat("\nLEFT JOIN (todos los empleados):\n")
+print(fusion_left)
+
+cat("\nExplicación: Se mantienen TODOS los empleados,\n")
+cat("aunque no tengan departamento asignado\n")
+```
+
+## Fusión tipo RIGHT JOIN
+
+```{r fusion_right}
+# Right join: todos los registros de la tabla derecha
+fusion_right <- dplyr::right_join(empleados, departamentos, by = "departamento_id")
+
+cat("\nRIGHT JOIN (todos los departamentos):\n")
+print(fusion_right)
+
+cat("\nExplicación: Se mantienen TODOS los departamentos,\n")
+cat("aunque no tengan empleados asignados\n")
+```
+
+## Fusión tipo FULL OUTER JOIN
+
+```{r fusion_full}
+# Full outer join: todos los registros de ambas tablas
+fusion_full <- dplyr::full_join(empleados, departamentos, by = "departamento_id")
+
+cat("\nFULL OUTER JOIN (todo):\n")
+print(fusion_full)
+
+cat("\nExplicación: Se mantienen TODOS los registros de ambas tablas,\n")
+cat("con NA donde no hay coincidencias\n")
+```
+
+## Fusión múltiple (tres tablas)
+
+```{r fusion_multiple}
+# Fusionar tres tablas secuencialmente
+cat("FUSIÓN DE TRES TABLAS:\n\n")
+
+# Paso 1: Fusionar empleados con departamentos
+paso1 <- dplyr::inner_join(empleados, departamentos, by = "departamento_id")
+cat("Paso 1 - Empleados + Departamentos:\n")
+cat("Dimensiones:", nrow(paso1), "filas x", ncol(paso1), "columnas\n\n")
+
+# Paso 2: Fusionar resultado con proyectos
+paso2 <- dplyr::left_join(paso1, proyectos, by = "departamento_id")
+cat("Paso 2 - Resultado + Proyectos:\n")
+print(paso2)
+
+cat("\nAhora tenemos información de empleados, sus departamentos y proyectos\n")
+```
+
+## Resumen de tipos de fusión
+
+```{r resumen_fusion}
+cat("\nRESUMEN - TIPOS DE FUSIÓN (dplyr)\n")
+cat("===================================\n\n")
+
+cat("inner_join(x, y, by = 'columna')  → INNER JOIN\n")
+cat("left_join(x, y, by = 'columna')   → LEFT JOIN\n")
+cat("right_join(x, y, by = 'columna')  → RIGHT JOIN\n")
+cat("full_join(x, y, by = 'columna')   → FULL OUTER JOIN\n\n")
+
+cat("Resultados en nuestro ejemplo:\n")
+cat("Inner join:", nrow(fusion_inner), "registros\n")
+cat("Left join:", nrow(fusion_left), "registros\n")
+cat("Right join:", nrow(fusion_right), "registros\n")
+cat("Full outer join:", nrow(fusion_full), "registros\n")
+```
+
+# Ejemplo integrador: Flujo completo de trabajo
+
+```{r ejemplo_integrador}
+cat("FLUJO COMPLETO DE TRABAJO CON DATOS\n")
+cat("=====================================\n\n")
+
+# Paso 1: Crear estructura de directorios
+if (!file.exists("data/proyecto")) {
+  dir.create("data/proyecto")
+  cat("✓ Directorio de proyecto creado\n")
+}
+
+# Paso 2: Generar múltiples archivos de datos simulados
+set.seed(123)  # Para reproducibilidad
+productos <- c("Producto_A", "Producto_B", "Producto_C")
+
+for(mes in 1:3) {
+  # Generar datos aleatorios para cada mes
+  n_dias <- 10
+  datos_mes <- data.frame(
+    fecha = seq(as.Date(paste0("2024-0", mes, "-01")), 
+                by = "day", length.out = n_dias),
+    ventas = round(rnorm(n_dias, mean = 1000, sd = 200), 2),
+    producto = sample(productos, n_dias, replace = TRUE),
+    unidades = sample(10:50, n_dias, replace = TRUE)
+  )
+  
+  # Guardar en archivo
+  nombre_archivo <- paste0("data/proyecto/ventas_mes_", mes, ".csv")
+  write.csv(datos_mes, nombre_archivo, row.names = FALSE)
+  cat("✓ Creado:", basename(nombre_archivo), "\n")
+}
+
+# Paso 3: Listar archivos creados
+cat("\n--- LISTADO DE ARCHIVOS ---\n")
+archivos_proyecto <- list.files("data/proyecto", 
+                                 pattern = "ventas.*\\.csv$", 
+                                 full.names = TRUE)
+cat("Archivos encontrados:", length(archivos_proyecto), "\n")
+for(archivo in archivos_proyecto) {
+  cat("  -", basename(archivo), "\n")
+}
+
+# Paso 4: Importar todos los archivos
+cat("\n--- IMPORTACIÓN ---\n")
+lista_meses <- list()
+for(i in 1:length(archivos_proyecto)) {
+  datos_temp <- read.csv(archivos_proyecto[i])
+  nombre_mes <- paste0("mes_", i)
+  lista_meses[[nombre_mes]] <- datos_temp
+  cat("✓ Importado mes", i, ":", nrow(datos_temp), "registros\n")
+}
+
+# Paso 5: Combinar todos los datos
+cat("\n--- COMBINACIÓN ---\n")
+# Usar rbind para unir todos los data frames
+datos_completos <- do.call(rbind, lista_meses)
+
+# Paso 6: Análisis básico
+cat("✓ Datos combinados exitosamente\n\n")
+cat("--- ANÁLISIS BÁSICO ---\n")
+cat("Total de registros:", nrow(datos_completos), "\n")
+cat("Columnas:", paste(colnames(datos_completos), collapse = ", "), "\n")
+
+# Convertir fechas
+datos_completos$fecha <- as.Date(datos_completos$fecha)
+cat("Rango de fechas:", 
+    format(min(datos_completos$fecha), "%d/%m/%Y"), "a", 
+    format(max(datos_completos$fecha), "%d/%m/%Y"), "\n")
+
+# Estadísticas por producto
+cat("\nVentas totales por producto:\n")
+ventas_producto <- aggregate(ventas ~ producto, 
+                             data = datos_completos, 
+                             FUN = sum)
+print(ventas_producto)
+
+# Paso 7: Guardar resultado procesado
+saveRDS(datos_completos, "data/proyecto/ventas_consolidadas.rds")
+cat("\n✓ Datos consolidados guardados en 'ventas_consolidadas.rds'\n")
+
+# Verificar archivo guardado
+tamaño <- file.info("data/proyecto/ventas_consolidadas.rds")$size
+cat("Tamaño del archivo:", round(tamaño/1024, 2), "KB\n")
+```
+
+# Resumen de funciones clave
+
+```{r resumen_funciones, results='asis'}
+# Crear tabla resumen
+funciones <- data.frame(
+  Categoria = c("Directorios", "Directorios", "Archivos", "Archivos", 
+                "Archivos", "Importación", "Importación", "Importación",
+                "Lectura especial", "Guardado", "Guardado", "Guardado",
+                "Fusión", "Fusión"),
+  Funcion = c("getwd()", "setwd()", "list.files()", "file.exists()",
+              "file.info()", "read.csv()", "read_csv()", "import()",
+              "readLines()", "saveRDS()", "save()", "save.image()",
+              "merge()", "rbind()"),
+  Descripcion = c("Obtener directorio actual", "Cambiar directorio",
+                  "Listar archivos", "Verificar si existe archivo",
+                  "Info detallada de archivos", "Importar CSV (base)",
+                  "Importar CSV (readr)", "Importar (detecta formato)",
+                  "Leer línea a línea", "Guardar 1 objeto",
+                  "Guardar múltiples objetos", "Guardar workspace",
+                  "Fusionar data frames", "Unir por filas"),
+  Paquete = c("base", "base", "base", "base", "base",
+              "base", "readr", "rio", "base",
+              "base", "base", "base", "base", "base")
+)
+
+kable(funciones, caption = "Resumen de funciones para manejo de datos")
+```
+---
+
+**Nota**: Este documento usa ÚNICAMENTE R base, readr y dplyr para fusionar dataframes. Todos los ejemplos son funcionales y se recomienda ejecutarlos paso a paso para comprender cada concepto. El uso del **Asistente de Importación de RStudio** es altamente recomendado para aprender la sintaxis correcta.
